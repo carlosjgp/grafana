@@ -171,11 +171,11 @@ func (st *Manager) ResetStateByRuleUID(ctx context.Context, ruleKey ngModels.Ale
 func (st *Manager) ProcessEvalResults(ctx context.Context, evaluatedAt time.Time, alertRule *ngModels.AlertRule, results eval.Results, extraLabels data.Labels) []*State {
 	logger := st.log.FromContext(ctx)
 	logger.Debug("State manager processing evaluation results", "resultCount", len(results))
-	var states []*State
+	var states []ContextualState
 	processedResults := make(map[string]*State, len(results))
 	for _, result := range results {
 		s := st.setNextState(ctx, alertRule, result, extraLabels, logger)
-		states = append(states, s.State)
+		states = append(states, s)
 		processedResults[s.State.CacheID] = s.State
 	}
 	resolvedStates := st.staleResultsHandler(ctx, evaluatedAt, alertRule, processedResults, logger)
@@ -183,7 +183,21 @@ func (st *Manager) ProcessEvalResults(ctx context.Context, evaluatedAt time.Time
 		logger.Debug("Saving new states to the database", "count", len(states))
 		_, _ = st.saveAlertStates(ctx, states...)
 	}
-	return append(states, resolvedStates...)
+
+	changedStates := make([]ContextualState, 0, len(states))
+	for _, s := range states {
+		if stateTransitioned(s) {
+			changedStates = append(changedStates, s)
+		}
+	}
+	st.historian.RecordStates(ctx, changedStates)
+
+	deltas := append(states, resolvedStates...)
+	nextStates := make([]*State, 0, len(states))
+	for _, s := range deltas {
+		nextStates = append(nextStates, s.State)
+	}
+	return nextStates
 }
 
 // Maybe take a screenshot. Do it if:
@@ -278,10 +292,6 @@ func (st *Manager) setNextState(ctx context.Context, alertRule *ngModels.AlertRu
 		PreviousStateReason: oldReason,
 	}
 
-	shouldRecordHistory := oldState != currentState.State || oldReason != currentState.StateReason
-	if shouldRecordHistory && st.historian != nil {
-		go st.historian.RecordState(ctx, nextState)
-	}
 	return nextState
 }
 
@@ -318,7 +328,7 @@ func (st *Manager) Put(states []*State) {
 }
 
 // TODO: Is the `State` type necessary? Should it embed the instance?
-func (st *Manager) saveAlertStates(ctx context.Context, states ...*State) (saved, failed int) {
+func (st *Manager) saveAlertStates(ctx context.Context, states ...ContextualState) (saved, failed int) {
 	if st.instanceStore == nil {
 		return 0, 0
 	}
@@ -338,8 +348,8 @@ func (st *Manager) saveAlertStates(ctx context.Context, states ...*State) (saved
 		labels := ngModels.InstanceLabels(s.Labels)
 		_, hash, err := labels.StringAndHash()
 		if err != nil {
-			debug = append(debug, debugInfo{s.OrgID, s.AlertRuleUID, s.State.String(), s.Labels.String()})
-			st.log.Error("Failed to save alert instance with invalid labels", "orgID", s.OrgID, "rule", s.AlertRuleUID, "error", err)
+			debug = append(debug, debugInfo{s.OrgID, s.AlertRuleUID, s.State.State.String(), s.Labels.String()})
+			st.log.Error("Failed to save alert instance with invalid labels", "orgID", s.OrgID, "ruleUID", s.AlertRuleUID, "error", err)
 			continue
 		}
 		fields := ngModels.AlertInstance{
@@ -349,7 +359,7 @@ func (st *Manager) saveAlertStates(ctx context.Context, states ...*State) (saved
 				LabelsHash: hash,
 			},
 			Labels:            ngModels.InstanceLabels(s.Labels),
-			CurrentState:      ngModels.InstanceStateType(s.State.String()),
+			CurrentState:      ngModels.InstanceStateType(s.State.State.String()),
 			CurrentReason:     s.StateReason,
 			LastEvalTime:      s.LastEvaluationTime,
 			CurrentStateSince: s.StartsAt,
@@ -381,8 +391,8 @@ func translateInstanceState(state ngModels.InstanceStateType) eval.State {
 	}
 }
 
-func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Time, alertRule *ngModels.AlertRule, states map[string]*State, logger log.Logger) []*State {
-	var resolvedStates []*State
+func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Time, alertRule *ngModels.AlertRule, states map[string]*State, logger log.Logger) []ContextualState {
+	var resolvedStates []ContextualState
 	allStates := st.GetStatesForRuleUID(alertRule.OrgID, alertRule.UID)
 	toDelete := make([]ngModels.AlertInstanceKey, 0)
 
@@ -408,19 +418,20 @@ func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Tim
 				s.EndsAt = evaluatedAt
 				s.Resolved = true
 				s.LastEvaluationTime = evaluatedAt
-				if st.historian != nil {
-					record := ContextualState{
-						State:               s,
-						RuleID:              alertRule.ID,
-						RuleTitle:           alertRule.Title,
-						PreviousState:       oldState,
-						PreviousStateReason: oldReason,
-					}
-					st.historian.RecordState(ctx, record)
+				record := ContextualState{
+					State:               s,
+					RuleID:              alertRule.ID,
+					RuleTitle:           alertRule.Title,
+					PreviousState:       oldState,
+					PreviousStateReason: oldReason,
 				}
-				resolvedStates = append(resolvedStates, s)
+				resolvedStates = append(resolvedStates, record)
 			}
 		}
+	}
+
+	if st.historian != nil {
+		st.historian.RecordStates(ctx, resolvedStates)
 	}
 
 	if st.instanceStore != nil {
@@ -433,4 +444,8 @@ func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Tim
 
 func stateIsStale(evaluatedAt time.Time, lastEval time.Time, intervalSeconds int64) bool {
 	return !lastEval.Add(2 * time.Duration(intervalSeconds) * time.Second).After(evaluatedAt)
+}
+
+func stateTransitioned(s ContextualState) bool {
+	return s.PreviousState != s.State.State || s.PreviousStateReason != s.State.StateReason
 }

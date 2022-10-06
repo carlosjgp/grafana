@@ -30,7 +30,15 @@ func NewAnnotationHistorian(annotations annotations.Repository, dashboards dashb
 	}
 }
 
-func (h *AnnotationStateHistorian) RecordState(ctx context.Context, state state.ContextualState) {
+func (h *AnnotationStateHistorian) RecordStates(ctx context.Context, states []state.ContextualState) {
+	go func() {
+		for _, s := range states {
+			h.recordState(ctx, s)
+		}
+	}()
+}
+
+func (h *AnnotationStateHistorian) recordState(ctx context.Context, state state.ContextualState) {
 	logger := h.log.New(state.State.GetRuleKey().LogContext()...)
 	logger.Debug("Alert state changed creating annotation", "newState", state.Formatted(), "oldState", state.PreviousFormatted())
 
