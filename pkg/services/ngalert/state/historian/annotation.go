@@ -30,18 +30,18 @@ func NewAnnotationHistorian(annotations annotations.Repository, dashboards dashb
 	}
 }
 
-func (h *AnnotationStateHistorian) RecordState(ctx context.Context, rule *ngmodels.AlertRule, state *state.State, previousData state.InstanceStateAndReason) {
-	logger := h.log.New(rule.GetKey().LogContext()...)
-	logger.Debug("Alert state changed creating annotation", "newState", state.DisplayName(), "oldState", previousData.String())
+func (h *AnnotationStateHistorian) RecordState(ctx context.Context, state state.ContextualState) {
+	logger := h.log.New(state.State.GetRuleKey().LogContext()...)
+	logger.Debug("Alert state changed creating annotation", "newState", state.Formatted(), "oldState", state.PreviousFormatted())
 
 	labels := removePrivateLabels(state.Labels)
-	annotationText := fmt.Sprintf("%s {%s} - %s", rule.Title, labels.String(), state.DisplayName())
+	annotationText := fmt.Sprintf("%s {%s} - %s", state.RuleTitle, labels.String(), state.Formatted())
 
 	item := &annotations.Item{
-		AlertId:   rule.ID,
+		AlertId:   state.RuleID,
 		OrgId:     state.OrgID,
-		PrevState: previousData.String(),
-		NewState:  state.DisplayName(),
+		PrevState: state.PreviousFormatted(),
+		NewState:  state.Formatted(),
 		Text:      annotationText,
 		Epoch:     state.LastEvaluationTime.UnixNano() / int64(time.Millisecond),
 	}
@@ -56,7 +56,7 @@ func (h *AnnotationStateHistorian) RecordState(ctx context.Context, rule *ngmode
 			return
 		}
 
-		dashID, err := h.dashboards.getID(ctx, rule.OrgID, dashUid)
+		dashID, err := h.dashboards.getID(ctx, state.OrgID, dashUid)
 		if err != nil {
 			logger.Error("Error getting dashboard for alert annotation", "dashboardUID", dashUid, "error", err)
 			return
