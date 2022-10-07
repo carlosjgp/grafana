@@ -286,8 +286,7 @@ func (st *Manager) setNextState(ctx context.Context, alertRule *ngModels.AlertRu
 
 	nextState := ContextualState{
 		State:               currentState,
-		RuleID:              alertRule.ID,
-		RuleTitle:           alertRule.Title,
+		Rule:                alertRule,
 		PreviousState:       oldState,
 		PreviousStateReason: oldReason,
 	}
@@ -420,8 +419,7 @@ func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Tim
 				s.LastEvaluationTime = evaluatedAt
 				record := ContextualState{
 					State:               s,
-					RuleID:              alertRule.ID,
-					RuleTitle:           alertRule.Title,
+					Rule:                alertRule,
 					PreviousState:       oldState,
 					PreviousStateReason: oldReason,
 				}
