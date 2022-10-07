@@ -35,7 +35,7 @@ func (h *AnnotationStateHistorian) RecordStates(ctx context.Context, states []st
 }
 
 func (h *AnnotationStateHistorian) recordStatesSync(ctx context.Context, states []state.ContextualState) {
-	items := make([]*annotations.Item, 0, len(states))
+	items := make([]annotations.Item, 0, len(states))
 	for _, state := range states {
 		logger := h.log.New(state.State.GetRuleKey().LogContext()...)
 		logger.Debug("Alert state changed creating annotation", "newState", state.Formatted(), "oldState", state.PreviousFormatted())
@@ -43,7 +43,7 @@ func (h *AnnotationStateHistorian) recordStatesSync(ctx context.Context, states 
 		labels := removePrivateLabels(state.Labels)
 		annotationText := fmt.Sprintf("%s {%s} - %s", state.RuleTitle, labels.String(), state.Formatted())
 
-		item := &annotations.Item{
+		item := annotations.Item{
 			AlertId:   state.RuleID,
 			OrgId:     state.OrgID,
 			PrevState: state.PreviousFormatted(),
@@ -74,7 +74,7 @@ func (h *AnnotationStateHistorian) recordStatesSync(ctx context.Context, states 
 		items = append(items, item)
 	}
 
-	if err := h.annotations.Save(ctx, items...); err != nil {
+	if err := h.annotations.SaveMany(ctx, items); err != nil {
 		affectedIDs := make([]int64, 0, len(items))
 		for _, i := range items {
 			affectedIDs = append(affectedIDs, i.AlertId)
