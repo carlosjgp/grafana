@@ -448,6 +448,9 @@ func (ss *sqlStore) GetOrgUsers(ctx context.Context, query *org.GetOrgUsersQuery
 		sess := dbSession.Table("org_user")
 		sess.Join("INNER", ss.dialect.Quote("user"), fmt.Sprintf("org_user.user_id=%s.id", ss.dialect.Quote("user")))
 
+		// Include only the first id provider label
+		sess.Join("LEFT", ss.dialect.Quote("user_auth"), "org_user.user_id=user_auth.user_id").GroupBy("org_user.org_id, org_user.user_id")
+
 		whereConditions := make([]string, 0)
 		whereParams := make([]interface{}, 0)
 
@@ -500,6 +503,7 @@ func (ss *sqlStore) GetOrgUsers(ctx context.Context, query *org.GetOrgUsersQuery
 			"user.created",
 			"user.updated",
 			"user.is_disabled",
+			"user_auth.auth_module",
 		)
 		sess.Asc("user.email", "user.login")
 

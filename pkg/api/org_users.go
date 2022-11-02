@@ -11,6 +11,7 @@ import (
 	"github.com/grafana/grafana/pkg/api/response"
 	"github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
+	"github.com/grafana/grafana/pkg/services/login"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/util"
@@ -216,6 +217,11 @@ func (hs *HTTPServer) getOrgUsersHelper(c *models.ReqContext, query *org.GetOrgU
 			continue
 		}
 		user.AvatarURL = dtos.GetGravatarUrl(user.Email)
+		if user.AuthModule != nil && len(user.AuthModule) > 0 {
+			for _, authModule := range user.AuthModule {
+				user.AuthLabels = append(user.AuthLabels, login.GetAuthProviderLabel(authModule))
+			}
+		}
 
 		userIDs[fmt.Sprint(user.UserID)] = true
 		filteredUsers = append(filteredUsers, user)

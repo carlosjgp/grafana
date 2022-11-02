@@ -135,19 +135,35 @@ type UpdateOrgUserCommand struct {
 }
 
 type OrgUserDTO struct {
-	OrgID         int64           `json:"orgId" xorm:"org_id"`
-	UserID        int64           `json:"userId" xorm:"user_id"`
-	Email         string          `json:"email"`
-	Name          string          `json:"name"`
-	AvatarURL     string          `json:"avatarUrl" xorm:"avatar_url"`
-	Login         string          `json:"login"`
-	Role          string          `json:"role"`
-	LastSeenAt    time.Time       `json:"lastSeenAt"`
-	Updated       time.Time       `json:"-"`
-	Created       time.Time       `json:"-"`
-	LastSeenAtAge string          `json:"lastSeenAtAge"`
-	AccessControl map[string]bool `json:"accessControl,omitempty"`
-	IsDisabled    bool            `json:"isDisabled"`
+	OrgID         int64                `json:"orgId" xorm:"org_id"`
+	UserID        int64                `json:"userId" xorm:"user_id"`
+	Email         string               `json:"email"`
+	Name          string               `json:"name"`
+	AvatarURL     string               `json:"avatarUrl" xorm:"avatar_url"`
+	Login         string               `json:"login"`
+	Role          string               `json:"role"`
+	LastSeenAt    time.Time            `json:"lastSeenAt"`
+	Updated       time.Time            `json:"-"`
+	Created       time.Time            `json:"-"`
+	LastSeenAtAge string               `json:"lastSeenAtAge"`
+	AccessControl map[string]bool      `json:"accessControl,omitempty"`
+	IsDisabled    bool                 `json:"isDisabled"`
+	AuthLabels    []string             `json:"authLabels"`
+	AuthModule    AuthModuleConversion `json:"-"`
+}
+
+// implement Conversion interface to define custom field mapping (xorm feature)
+type AuthModuleConversion []string
+
+func (auth *AuthModuleConversion) FromDB(data []byte) error {
+	auth_module := string(data)
+	*auth = []string{auth_module}
+	return nil
+}
+
+// Just a stub, we don't want to write to database
+func (auth *AuthModuleConversion) ToDB() ([]byte, error) {
+	return []byte{}, nil
 }
 
 type RemoveOrgUserCommand struct {
