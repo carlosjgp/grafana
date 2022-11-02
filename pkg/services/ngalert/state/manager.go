@@ -190,7 +190,7 @@ func (st *Manager) ProcessEvalResults(ctx context.Context, evaluatedAt time.Time
 			changedStates = append(changedStates, s)
 		}
 	}
-	st.historian.RecordStates(ctx, changedStates)
+	st.historian.RecordStates(ctx, alertRule, changedStates)
 
 	deltas := append(states, resolvedStates...)
 	nextStates := make([]*State, 0, len(states))
@@ -286,7 +286,6 @@ func (st *Manager) setNextState(ctx context.Context, alertRule *ngModels.AlertRu
 
 	nextState := StateTransition{
 		State:               currentState,
-		Rule:                alertRule,
 		PreviousState:       oldState,
 		PreviousStateReason: oldReason,
 	}
@@ -419,7 +418,6 @@ func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Tim
 				s.LastEvaluationTime = evaluatedAt
 				record := StateTransition{
 					State:               s,
-					Rule:                alertRule,
 					PreviousState:       oldState,
 					PreviousStateReason: oldReason,
 				}
@@ -429,7 +427,7 @@ func (st *Manager) staleResultsHandler(ctx context.Context, evaluatedAt time.Tim
 	}
 
 	if st.historian != nil {
-		st.historian.RecordStates(ctx, resolvedStates)
+		st.historian.RecordStates(ctx, alertRule, resolvedStates)
 	}
 
 	if st.instanceStore != nil {
