@@ -109,6 +109,7 @@ var (
 			Name:        "lokiMonacoEditor",
 			Description: "Access to Monaco query editor for Loki",
 			State:       FeatureStateAlpha,
+			Expression:  "true", // on by default
 		},
 		{
 			Name:        "swaggerUi",
